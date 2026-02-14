@@ -13,7 +13,8 @@ import (
 )
 
 type rawWriter struct {
-	lineNumber *int
+	expectedRows int
+	lineNumber   int
 }
 
 const lineNumberFormat = "%3d  "
@@ -133,25 +134,20 @@ func codeStyler(code *[]rune, quit chan struct{}, lexerName, styleName string) {
 		case <-quit:
 			return
 		default:
-			currentCode := *code
+			currentCodeSlice := *code
 
-			if len(currentCode) > 0 {
-				trimmedCode := strings.TrimRight(string(currentCode), " ")
+			if len(currentCodeSlice) > 0 {
+				currentCode := string(currentCodeSlice)
 
-				if oldCode != trimmedCode {
-					trailingSpaces := len(currentCode) - len(trimmedCode)
-
+				if oldCode != currentCode {
 					MoveToHome()
 					EraseToScreenEnd()
 
-					iterator, _ := lexer.Tokenise(nil, trimmedCode)
-					formatters.TTY16m.Format(newRawWriter(), style, iterator)
+					iterator, _ := lexer.Tokenise(nil, currentCode)
+					writer := newRawWriter(countRows(currentCodeSlice))
+					formatters.TTY16m.Format(writer, style, iterator)
 
-					if trailingSpaces > 0 {
-						MoveRight(trailingSpaces)
-					}
-
-					oldCode = trimmedCode
+					oldCode = currentCode
 				}
 			}
 
@@ -189,31 +185,42 @@ func countRows(code []rune) int {
 }
 
 // Creates a writer for writing in raw terminal mode.
-func newRawWriter() rawWriter {
-	return rawWriter{new(int)}
+func newRawWriter(expectedRows int) *rawWriter {
+	return &rawWriter{
+		expectedRows: expectedRows,
+		lineNumber:   0,
+	}
 }
 
 // Writes to the screen in raw terminal mode.
 // Handles newlines with ANSI codes and then inserts line numbers.
-func (writer rawWriter) Write(bytes []byte) (n int, err error) {
-	lastWrite := 0
-
-	if *writer.lineNumber == 0 {
-		*writer.lineNumber++
-		fmt.Printf(lineNumberFormat, *writer.lineNumber)
+func (writer *rawWriter) Write(bytes []byte) (n int, err error) {
+	if writer.lineNumber == 0 {
+		writer.lineNumber++
+		fmt.Printf(lineNumberFormat, writer.lineNumber)
 	}
 
 	for i, byte := range bytes {
 		if byte == '\n' {
-			print(string(bytes[lastWrite:i]))
-			*writer.lineNumber++
-			MoveDownToBeginning(1)
-			fmt.Printf(lineNumberFormat, *writer.lineNumber)
+			if writer.lineNumber < writer.expectedRows {
+				// print preceding text
+				print(string(bytes[:i]))
 
-			lastWrite = i + 1
+				// print line number
+				writer.lineNumber++
+				MoveDownToBeginning(1)
+				fmt.Printf(lineNumberFormat, writer.lineNumber)
+
+				bytes = bytes[i+1:]
+			} else {
+				bytes = bytes[:i]
+				break
+			}
 		}
 	}
-	print(string(bytes[lastWrite:]))
+
+	// print remaining
+	print(string(bytes[:]))
 
 	return len(bytes), nil
 }
