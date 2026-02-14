@@ -1,4 +1,4 @@
-package input
+package main
 
 const (
 	KEY_UNKNOWN     = 0
