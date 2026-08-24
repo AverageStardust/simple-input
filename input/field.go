@@ -67,7 +67,7 @@ func Confirm(question string) (confirmed bool) {
 
 	// scan a string to make sure we consume all input
 	var answer string
-	fmt.Scanf("%s", &answer)
+	fmt.Scanln(&answer)
 
 	confirmed = len(answer) > 0 && (answer[0] == 'Y' || answer[0] == 'y')
 
